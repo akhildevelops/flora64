@@ -36,7 +36,8 @@ const Context = struct { io: std.Io, allocator: std.mem.Allocator };
 pub fn main(init_params: std.process.Init) !void {
     const allocator = init_params.gpa;
     const io = init_params.io;
-    var files = (try get_files_from_arg(init_params.minimal.args, allocator)).mut().map(
+    var files_iter = try get_files_from_arg(init_params.minimal.args, allocator);
+    var files = try files_iter.map(
         (std.Io.Dir.RealPathFileAllocError)!datatypes.OwnedString,
         Context,
         .{ .allocator = allocator, .io = io },
@@ -50,6 +51,7 @@ pub fn main(init_params: std.process.Init) !void {
                 }
             }
         }._f,
+        allocator,
     );
     defer files.deinit(allocator);
     while (files.next()) |file| {
