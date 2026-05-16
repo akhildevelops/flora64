@@ -36,7 +36,7 @@ pub fn Iterator(T: type) type {
                         const iterator: *Iterator(T) = @ptrCast(@alignCast(_context));
                         return if (iterator.next()) |value| transform(context, value) orelse null;
                     }
-                },
+                }._next,
                 ._deinit = struct {
                     pub fn _de(_context: *anyopaque, allocator: std.mem.Allocator) void {
                         const iterator: *Iterator(T) = @ptrCast(@alignCast(_context));

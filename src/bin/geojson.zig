@@ -33,22 +33,27 @@ pub fn get_files_from_arg(args: std.process.Args, allocator: std.mem.Allocator) 
     };
 }
 const Context = struct { io: std.Io, allocator: std.mem.Allocator };
-pub fn main(init_params: std.process.Init) error{OutOfMemory}!void {
+pub fn main(init_params: std.process.Init) !void {
     const allocator = init_params.gpa;
     const io = init_params.io;
-    var files = (try get_files_from_arg(init_params.minimal.args, allocator)).mut().map(std.Io.Dir.RealPathError!datatypes.OwnedString([:0]const u8), Context, .{ .allocator = allocator, .io = io }, struct {
-        pub fn _f(context: Context, file: [:0]const u8) !datatypes.OwnedString([:0]const u8) {
-            if (file[0] == '/') {
-                return file;
-            } else {
-                const path = try std.Io.Dir.cwd().realPathFileAlloc(context.io, file, allocator);
-                return .{ .string = path };
+    var files = (try get_files_from_arg(init_params.minimal.args, allocator)).mut().map(
+        (std.Io.Dir.RealPathFileAllocError)!datatypes.OwnedString,
+        Context,
+        .{ .allocator = allocator, .io = io },
+        struct {
+            pub fn _f(context: Context, file: [:0]const u8) !datatypes.OwnedString {
+                if (file[0] == '/') {
+                    return .{ .string = try std.fmt.allocPrint(context.allocator, "{s}", .{file}) };
+                } else {
+                    const path = try std.Io.Dir.cwd().realPathFileAlloc(context.io, file, context.allocator);
+                    return .{ .string = path };
+                }
             }
-        }
-    });
+        }._f,
+    );
     defer files.deinit(allocator);
     while (files.next()) |file| {
-        _ = std.debug.print("{s}\n", .{file.string});
-        file.deinit();
+        _ = std.debug.print("{s}\n", .{(try file).string});
+        (try file).deinit(allocator);
     }
 }
