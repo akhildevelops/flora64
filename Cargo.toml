@@ -1,0 +1,16 @@
+[workspace]
+members = ["utils"]
+
+[package]
+name = "gis"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+geojson = "1.0.0"
+serde_json = "1.0.150"
+utils = { path = "./utils" }
+
+[profile.profiling]
+inherits = "release"
+debug = true
