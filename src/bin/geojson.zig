@@ -38,7 +38,7 @@ fn resolveFilePath(io: std.Io, file: [:0]const u8, allocator: std.mem.Allocator)
         return try std.fmt.allocPrint(allocator, "{s}", .{file});
     } else {
         const path_sentinel = try std.Io.Dir.cwd().realPathFileAlloc(io, file, allocator);
-        defer allocator.free(path_sentinel[0..path_sentinel.len + 1]);
+        defer allocator.free(path_sentinel[0 .. path_sentinel.len + 1]);
         return try std.fmt.allocPrint(allocator, "{s}", .{path_sentinel});
     }
 }
@@ -48,13 +48,58 @@ fn resolveFilePath(io: std.Io, file: [:0]const u8, allocator: std.mem.Allocator)
 /// from the "features" array and writing each one to stdout immediately.
 /// Memory usage is bounded: read_buffer (64 KB) + largest feature + small overhead.
 const Nav = enum {
-    root,           // navigating root object keys
-    skip_value,     // skipping a non-features value's content
-    features_arr,   // found "features" key, waiting for '['
-    features,       // inside the features array
-    feature,        // inside a feature object (tracking brace depth)
-    done,           // finished processing
+    root, // navigating root object keys
+    skip_value, // skipping a non-features value's content
+    features_arr, // found "features" key, waiting for '['
+    features, // inside the features array
+    feature, // inside a feature object (tracking brace depth)
+    done, // finished processing
 };
+
+/// Process all files, writing merged GeoJSON to the output writer.
+fn processAllFiles(
+    files: []const [:0]const u8,
+    out: *std.Io.Writer,
+    allocator: std.mem.Allocator,
+    io: std.Io,
+) !void {
+    const read_buffer = try allocator.alloc(u8, 65536);
+    defer allocator.free(read_buffer);
+
+    try out.writeAll("{\"type\":\"FeatureCollection\",\"features\":[\n");
+
+    var first_feature = true;
+    var total_count: usize = 0;
+
+    for (files) |file| {
+        const file_path = resolveFilePath(io, file, allocator) catch |err| {
+            std.debug.print("Error resolving path for '{s}': {}\n", .{ file, err });
+            continue;
+        };
+        defer allocator.free(file_path);
+
+        std.debug.print("Reading: {s}\n", .{file_path});
+
+        const file_obj = std.Io.Dir.openFileAbsolute(io, file_path, .{}) catch |err| {
+            std.debug.print("  Error opening: {}\n", .{err});
+            continue;
+        };
+        defer file_obj.close(io);
+
+        var file_reader = file_obj.reader(io, read_buffer);
+
+        const before = total_count;
+        processFile(&file_reader, out, &first_feature, &total_count, allocator) catch |err| {
+            std.debug.print("  Error processing: {}\n", .{err});
+            continue;
+        };
+        const file_count = total_count - before;
+        std.debug.print("  Loaded {d} features\n", .{file_count});
+    }
+
+    try out.writeAll("]}\n");
+    std.debug.print("Total: {d} features merged\n", .{total_count});
+}
 
 /// Processes a single GeoJSON file from a file_reader in a streaming fashion.
 /// Extracts each feature from the "features" array and writes it to stdout.
@@ -210,49 +255,36 @@ fn processFile(
 pub fn main(init_params: std.process.Init) !void {
     const allocator = init_params.gpa;
     const io = init_params.io;
-    var file_names = try get_files_from_arg(init_params.minimal.args, allocator);
-    defer file_names.deinit(allocator);
+    const args = init_params.minimal.args;
 
-    const read_buffer = try allocator.alloc(u8, 65536);
-    defer allocator.free(read_buffer);
+    // Parse arguments: -o <output_file> file1 file2 ...
+    var output_path: ?[]const u8 = null;
+    var file_paths = try std.ArrayList([:0]const u8).initCapacity(allocator, 0);
+    defer file_paths.deinit(allocator);
 
-    // Streaming stdout writer
-    var stdout_buf: [8192]u8 = undefined;
-    var fw = std.Io.File.stdout().writer(io, &stdout_buf);
-    const out = &fw.interface;
-
-    try out.writeAll("{\"type\":\"FeatureCollection\",\"features\":[\n");
-
-    var first_feature = true;
-    var total_count: usize = 0;
-
-    while (file_names.next()) |file| {
-        const file_path = resolveFilePath(io, file, allocator) catch |err| {
-            std.debug.print("Error resolving path for '{s}': {}\n", .{ file, err });
-            continue;
-        };
-        defer allocator.free(file_path);
-
-        std.debug.print("Reading: {s}\n", .{file_path});
-
-        const file_obj = std.Io.Dir.openFileAbsolute(io, file_path, .{}) catch |err| {
-            std.debug.print("  Error opening: {}\n", .{err});
-            continue;
-        };
-        defer file_obj.close(io);
-
-        var file_reader = file_obj.reader(io, read_buffer);
-
-        const before = total_count;
-        processFile(&file_reader, out, &first_feature, &total_count, allocator) catch |err| {
-            std.debug.print("  Error processing: {}\n", .{err});
-            continue;
-        };
-        const file_count = total_count - before;
-        std.debug.print("  Loaded {d} features\n", .{file_count});
+    {
+        var i: usize = 1;
+        while (i < args.vector.len) : (i += 1) {
+            const arg = std.mem.span(args.vector[i]);
+            if (std.mem.eql(u8, arg, "-o") and i + 1 < args.vector.len) {
+                i += 1;
+                output_path = std.mem.span(args.vector[i]);
+            } else {
+                file_paths.append(allocator, arg) catch @panic("OOM");
+            }
+        }
     }
 
-    try out.writeAll("]}\n");
-    try fw.end();
-    std.debug.print("Total: {d} features merged\n", .{total_count});
+    var out_buf: [8192]u8 = undefined;
+    if (output_path) |path| {
+        var out_file = try std.Io.Dir.createFileAbsolute(io, path, .{});
+        defer out_file.close(io);
+        var fw = out_file.writer(io, &out_buf);
+        try processAllFiles(file_paths.items, &fw.interface, allocator, io);
+        try fw.end();
+    } else {
+        var fw = std.Io.File.stdout().writer(io, &out_buf);
+        try processAllFiles(file_paths.items, &fw.interface, allocator, io);
+        try fw.end();
+    }
 }
