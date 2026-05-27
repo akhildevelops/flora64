@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>flora64 – GeoJSON Merge</title>
+  <link rel="stylesheet" href="./style.css" />
+  <script type="module" src="./main.js" defer></script>
+</head>
+<body>
+  <div class="app">
+    <!-- Header -->
+    <header class="header">
+      <h1 class="title">flora64</h1>
+      <p class="subtitle">Client-side GeoJSON merger powered by Zig WASM</p>
+    </header>
+
+    <!-- Drop zone -->
+    <label class="drop-zone" id="dropZone">
+      <input
+        type="file"
+        id="fileInput"
+        accept=".geojson,.json"
+        multiple
+        hidden
+      />
+      <div class="drop-zone-content">
+        <svg class="drop-icon" viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+          <polyline points="17 8 12 3 7 8" />
+          <line x1="12" y1="3" x2="12" y2="15" />
+        </svg>
+        <p class="drop-text">Drop GeoJSON files here</p>
+        <p class="drop-hint">or click to browse</p>
+      </div>
+    </label>
+
+    <!-- File list -->
+    <div class="file-list" id="fileList">
+      <!-- populated dynamically -->
+    </div>
+
+    <!-- Action bar -->
+    <div class="actions">
+      <button class="btn btn-primary" id="mergeBtn" disabled>
+        Merge Files
+      </button>
+      <button class="btn btn-secondary" id="clearBtn" disabled>
+        Clear All
+      </button>
+    </div>
+
+    <!-- Progress -->
+    <div class="progress" id="progress" hidden>
+      <div class="progress-bar" id="progressBar">
+        <div class="progress-fill" id="progressFill"></div>
+      </div>
+      <p class="progress-text" id="progressText">Initializing…</p>
+    </div>
+
+    <!-- Result -->
+    <div class="result" id="result" hidden>
+      <p class="result-text" id="resultText"></p>
+      <a class="btn btn-download" id="downloadBtn">Download Merged GeoJSON</a>
+    </div>
+
+    <!-- Error -->
+    <div class="error" id="error" hidden>
+      <p class="error-text" id="errorText"></p>
+    </div>
+
+    <!-- Status bar -->
+    <footer class="status">
+      <span id="statusMsg">Ready</span>
+      <span id="featureCount"></span>
+    </footer>
+  </div>
+</body>
+</html>
