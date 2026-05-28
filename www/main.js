@@ -56,8 +56,6 @@ dropZone.addEventListener('drop', (e) => {
   addFiles(e.dataTransfer.files);
 });
 
-dropZone.addEventListener('click', () => fileInput.click());
-
 fileInput.addEventListener('change', () => {
   addFiles(fileInput.files);
   fileInput.value = '';
