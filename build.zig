@@ -10,10 +10,14 @@ pub fn build(b: *std.Build) void {
 
     const merge_core_mod = b.addModule("merge_core", .{
         .root_source_file = b.path("src/merge_core.zig"),
+        .target = target,
+        .optimize = optimize,
     });
 
     const data_types_mod = b.addModule("data_types", .{
         .root_source_file = b.path("src/data_types.zig"),
+        .target = target,
+        .optimize = optimize,
     });
 
     const flora64_mod = b.addModule("flora64", .{

@@ -1,0 +1,113 @@
+# =============================================================================
+# deploy.yml — flora64 deployment pipeline
+#
+# Triggers: push to main or manual workflow_dispatch
+#
+# Builds:
+#   1. Zig WASM binary  → www/public/flora64_merge.wasm
+#   2. Vite static site → www/dist/
+#
+# Deploys:
+#   - Bundles the built dist, server.js, and ecosystem.config.cjs together
+#   - Copies to the remote server via rsync (SSH)
+#   - Restarts the Node.js PM2 server on the remote host
+#
+# Required secrets (set in GitHub repo → Settings → Secrets → Actions):
+#   DEPLOY_HOST      – remote server hostname or IP
+#   DEPLOY_USER      – SSH user (e.g., "deploy", "ubuntu")
+#   DEPLOY_KEY       – private SSH key (PEM format, the public key must be
+#                      authorized on the server)
+#   DEPLOY_PATH      – absolute path on the server (e.g., "/var/www/flora64")
+# =============================================================================
+
+name: Deploy
+
+on:
+  push:
+    branches: [main, ziglang]
+  workflow_dispatch:         # allow manual trigger from the Actions tab
+
+env:
+  ZIG_VERSION: 0.16.0
+  NODE_VERSION: 22
+
+jobs:
+  deploy:
+    name: Build & Deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      # ---- Checkout -------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ---- Zig -------------------------------------------------------------
+      - name: Install Zig ${{ env.ZIG_VERSION }}
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+
+      - name: Build WASM binary
+        run: zig build
+        # Produces www/public/flora64_merge.wasm
+
+      # ---- Node.js / Vite --------------------------------------------------
+      - name: Install Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: www/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: www
+
+      - name: Build frontend
+        run: npm run build
+        working-directory: www
+        # Produces www/dist/
+
+      # ---- Package deploy bundle -------------------------------------------
+      - name: Prepare deploy bundle
+        run: |
+          mkdir -p deploy-bundle
+          # Copy built static site
+          cp -r www/dist/* deploy-bundle/
+          # Copy server files (alongside the static root)
+          cp server.js ecosystem.config.cjs deploy-bundle/
+          # Copy package.json & lock so server can `npm ci --omit=dev`
+          # if production dependencies are ever added
+          cp www/package.json deploy-bundle/
+
+      # ---- Deploy via rsync over SSH ---------------------------------------
+      - name: Install rsync
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq rsync
+
+      - name: Copy deploy bundle to server
+        uses: easingthemes/ssh-deploy@v4
+        with:
+          SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_KEY }}
+          REMOTE_HOST: ${{ secrets.DEPLOY_HOST }}
+          REMOTE_USER: ${{ secrets.DEPLOY_USER }}
+          TARGET: ${{ secrets.DEPLOY_PATH }}
+          SOURCE: deploy-bundle/
+          EXCLUDE: ""
+          ARGS: >-
+            -avz
+            --delete
+            --checksum
+
+      # ---- Health check ------------------------------------------------------
+      - name: Verify server is running
+        uses: appleboy/ssh-action@v1
+        with:
+          key: ${{ secrets.DEPLOY_KEY }}
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          script: |
+            sleep 3
+            curl -sfI http://localhost:3000/ > /dev/null \
+              && echo "Health check PASSED" \
+              || { echo "Health check FAILED" >&2; exit 1; }
