@@ -40,6 +40,9 @@ let wasmModule = null; // compiled WebAssembly.Module
   }
 })();
 
+/* ---- File inputs ---- */
+const folderInput = document.getElementById('folderInput');
+
 /* ---- Drag & drop ---- */
 dropZone.addEventListener('dragover', (e) => {
   e.preventDefault();
@@ -59,6 +62,21 @@ dropZone.addEventListener('drop', (e) => {
 fileInput.addEventListener('change', () => {
   addFiles(fileInput.files);
   fileInput.value = '';
+});
+
+folderInput.addEventListener('change', () => {
+  addFiles(folderInput.files);
+  folderInput.value = '';
+});
+
+/* ---- Drop zone action buttons ---- */
+dropZone.querySelectorAll('.drop-action').forEach((btn) => {
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const picker = btn.dataset.picker;
+    if (picker === 'files') fileInput.click();
+    else if (picker === 'folder') folderInput.click();
+  });
 });
 
 /* ---- File management ---- */

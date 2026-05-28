@@ -116,6 +116,46 @@ body {
   color: var(--text-dim);
 }
 
+/* ---------- Drop zone action buttons ---------- */
+.drop-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.drop-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8rem;
+  color: var(--accent);
+  cursor: pointer;
+  transition: border-color var(--transition), background var(--transition);
+  font-family: inherit;
+  font-weight: 500;
+  pointer-events: auto;
+}
+
+.drop-action:hover {
+  border-color: var(--accent);
+  background: rgba(88, 166, 255, 0.1);
+}
+
+.drop-action svg {
+  flex-shrink: 0;
+}
+
+.drop-separator {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  user-select: none;
+}
+
 /* ---------- File list ---------- */
 .file-list {
   display: flex;

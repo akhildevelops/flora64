@@ -24,7 +24,7 @@ name: Deploy
 
 on:
   push:
-    branches: [main, ziglang]
+    branches: [main]
   workflow_dispatch:         # allow manual trigger from the Actions tab
 
 env:
