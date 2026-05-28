@@ -22,7 +22,7 @@ const statusMsg = document.getElementById('statusMsg');
 const featureCount = document.getElementById('featureCount');
 
 /* ---- State ---- */
-/** @type {{ name: string; size: number; data: ArrayBuffer }[]} */
+/** @type {{ name: string; size: number; data: ArrayBuffer; webkitRelativePath?: string }[]} */
 const files = [];
 let wasmModule = null; // compiled WebAssembly.Module
 
@@ -80,7 +80,7 @@ async function addFiles(fileListLike) {
   for (const f of newFiles) {
     try {
       const data = await f.arrayBuffer();
-      files.push({ name: f.name, size: f.size, data });
+      files.push({ name: f.name, size: f.size, data, webkitRelativePath: f.webkitRelativePath || '' });
     } catch (err) {
       showError(`Failed to read "${f.name}": ${err.message}`);
     }
@@ -117,20 +117,23 @@ function fmtSize(bytes) {
 function renderFileList() {
   if (files.length === 0) {
     fileList.innerHTML =
-      '<p style="text-align:center;color:var(--text-dim);font-size:0.85rem;padding:1rem 0;">No files added yet</p>';
+      '<p style="text-align:center;color:var(--text-dim);font-size:0.85rem;padding:1rem 0;">Drop files / folders or click the zone above to pick a folder</p>';
     return;
   }
 
   fileList.innerHTML = files
     .map(
-      (f, i) => `
+      (f, i) => {
+        const relPath = f.webkitRelativePath || '';
+        const showPath = relPath && relPath !== f.name;
+        return `
     <div class="file-item">
       <svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
         <polyline points="14 2 14 8 20 8"/>
       </svg>
       <div class="file-info">
-        <div class="file-name">${escHtml(f.name)}</div>
+        <div class="file-name">${showPath ? escHtml(relPath) : escHtml(f.name)}</div>
         <div class="file-meta">${fmtSize(f.size)}</div>
       </div>
       <span class="file-status ready">ready</span>
@@ -139,7 +142,8 @@ function renderFileList() {
           <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
         </svg>
       </button>
-    </div>`,
+    </div>`;
+      },
     )
     .join('');
 
