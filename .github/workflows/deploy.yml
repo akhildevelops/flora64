@@ -8,34 +8,41 @@
 #   2. Vite static site → www/dist/
 #
 # Deploys:
-#   - Bundles the built dist, server.js, and ecosystem.config.cjs together
-#   - Copies to the remote server via rsync (SSH)
-#   - Restarts the Node.js PM2 server on the remote host
-#
-# Required secrets (set in GitHub repo → Settings → Secrets → Actions):
-#   DEPLOY_HOST      – remote server hostname or IP
-#   DEPLOY_USER      – SSH user (e.g., "deploy", "ubuntu")
-#   DEPLOY_KEY       – private SSH key (PEM format, the public key must be
-#                      authorized on the server)
-#   DEPLOY_PATH      – absolute path on the server (e.g., "/var/www/flora64")
+#   - Uploads www/dist/ as a GitHub Pages artifact
+#   - Deploys to GitHub Pages
 # =============================================================================
 
 name: Deploy
 
 on:
   push:
-    branches: [main]
+    branches: [ziglang]
   workflow_dispatch:         # allow manual trigger from the Actions tab
 
 env:
   ZIG_VERSION: 0.16.0
   NODE_VERSION: 22
 
+# Allow only one concurrent deployment
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
 jobs:
   deploy:
     name: Build & Deploy
     runs-on: ubuntu-latest
     timeout-minutes: 15
+
+    # Grant GITHUB_TOKEN the permissions required for GitHub Pages
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
       # ---- Checkout -------------------------------------------------------
@@ -69,46 +76,15 @@ jobs:
         working-directory: www
         # Produces www/dist/
 
-      # ---- Package deploy bundle -------------------------------------------
-      - name: Prepare deploy bundle
-        run: |
-          mkdir -p deploy-bundle
-          # Copy built static site
-          cp -r www/dist/* deploy-bundle/
-          # Copy server files (alongside the static root)
-          cp server.js ecosystem.config.cjs deploy-bundle/
-          # Copy package.json & lock so server can `npm ci --omit=dev`
-          # if production dependencies are ever added
-          cp www/package.json deploy-bundle/
+      # ---- GitHub Pages ----------------------------------------------------
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
 
-      # ---- Deploy via rsync over SSH ---------------------------------------
-      - name: Install rsync
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq rsync
-
-      - name: Copy deploy bundle to server
-        uses: easingthemes/ssh-deploy@v4
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_KEY }}
-          REMOTE_HOST: ${{ secrets.DEPLOY_HOST }}
-          REMOTE_USER: ${{ secrets.DEPLOY_USER }}
-          REMOTE_PORT: ${{ secrets.DEPLOY_PORT }}
-          TARGET: ${{ secrets.DEPLOY_PATH }}
-          SOURCE: deploy-bundle/
-          EXCLUDE: ""
-          ARGS: >-
-            -avz
-            --delete
-            --checksum
+          path: www/dist
 
-      # ---- Health check ------------------------------------------------------
-      - name: Verify server is running
-        uses: appleboy/ssh-action@v1
-        with:
-          key: ${{ secrets.DEPLOY_KEY }}
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          script: |
-            sleep 3
-            curl -sfI http://localhost:3000/ > /dev/null \
-              && echo "Health check PASSED" \
-              || { echo "Health check FAILED" >&2; exit 1; }
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
